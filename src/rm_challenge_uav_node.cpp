@@ -61,20 +61,23 @@ int main( int argc, char **argv )
     g_fsm.initialize();
     ROS_INFO_STREAM( "initialize finish, start to run" );
     /*test setter function of FSM*/
-    //    g_fsm.setDroneState( 1 );
+    g_fsm.setDroneState( 3 );
     //    g_fsm.setDroneState( 3 );
     //    g_fsm.setDroneState( 4 );
-    //    g_fsm.setHeightFromGuidance( 0.5 );
-    //    g_fsm.setPositionFromGuidance( 1.1, 1.1 );
-    //    float pos_err[2] = { 1.1, 2.1 };
-    //    g_fsm.setCircleVariables( true, pos_err, 1.1 );
-    //    g_fsm.setCircleVariables( false, pos_err, 1.1 );
-    //    int tri[4] = { 1, 1, 0, 0 };
-    //    g_fsm.setTriangleVariables( tri );
+    g_fsm.setHeightFromGuidance( 0 );
+    g_fsm.setPositionFromGuidance( 7, 0 );
+    g_fsm.m_setpoints[0][0] = 8;
+    g_fsm.m_setpoints[0][1] = 0;
+       // float pos_err[2] = { 0.07, 0.3 };
+       // g_fsm.setCircleVariables( true, pos_err, 1.1 );
+       // g_fsm.setCircleVariables( false, pos_err, 1.1 );
+       // int tri[4] = { 1, 1, 0, 0 };
+       // g_fsm.setTriangleVariables( tri );
     //    g_fsm.setBaseVariables( true, pos_err );
     //    g_fsm.setBaseVariables( false, pos_err );
-    //    float dis[2] = { 0.3, 0.3 };
-    //    float nor[2] = { 1.3, -0.4 };
+       float dis[2] = { 0.3, 0.3 };
+       float nor[2] = { 1.3, -0.4 };
+       g_fsm.setLineVariables(dis,nor);
     //    ros::Duration( 2.0 ).sleep();
     /*test*/
     ros::spin();
