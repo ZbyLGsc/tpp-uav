@@ -234,9 +234,9 @@ bool RMChallengeFSM::isTakeoffTimeout()
     double t = ros::Time::now().toSec() - m_takeoff_time.toSec();
     ROS_INFO_STREAM( "time now is:" << ros::Time::now().toSec() );
     ROS_INFO_STREAM( "takeoff time is:" << m_takeoff_time.toSec() );
-    static double time_threshold = 100;
+    // static double time_threshold = 100;
     ROS_INFO_STREAM( "Taking off time is:" << t );
-    if ( time_threshold < t )
+    if ( PA_TAKEOFF_TIME < t )
     {
         ROS_INFO_STREAM( "Time is enough" );
         return true;
@@ -277,8 +277,8 @@ bool RMChallengeFSM::closeToGoalHeight()
 {
     float height_error = fabs( m_current_height_from_guidance -
                                m_goal_height[m_current_takeoff_point_id] );
-    static float height_threshold = 10;
-    if ( height_error < height_threshold )
+    // static float height_threshold = 10;
+    if ( height_error < PA_TAKEOFF_HEIGHT_THRESHOLD )
     {
         ROS_INFO_STREAM( "Take off height error :" << height_error << "is "
                                                                       "small" );
@@ -300,8 +300,8 @@ bool RMChallengeFSM::farFromTakeoffPoint()
               pow( m_current_position_from_guidance[1] -
                        m_takeoff_points[m_current_takeoff_point_id][1],
                    2 ) );
-    static double takeoff_pos_err_threshold = 5;
-    if ( pos_error > takeoff_pos_err_threshold )
+    // static double takeoff_pos_err_threshold = 5;
+    if ( pos_error > PA_TAKEOFF_POSITION_ERROR )
     {
         ROS_INFO_STREAM( "distance to takeoff point is:" << pos_error << ",fa"
                                                                          "r" );
@@ -383,8 +383,8 @@ bool RMChallengeFSM::closeToSetPoint()
     double pos_error =
         sqrt( pow( disp_x - m_setpoints[m_current_takeoff_point_id][0], 2 ) +
               pow( disp_y - m_setpoints[m_current_takeoff_point_id][1], 2 ) );
-    static double setpoint_pos_err_threshold = 2;
-    if ( pos_error < setpoint_pos_err_threshold )
+    // static double setpoint_pos_err_threshold = 2;
+    if ( pos_error < PA_SETPOINT_POSITION_ERROR )
     {
         ROS_INFO_STREAM( "Error to setpoint is :" << pos_error << ",close" );
         return true;
@@ -397,8 +397,8 @@ bool RMChallengeFSM::closeToSetPoint()
 }
 bool RMChallengeFSM::finishGraspperTask()
 {
-    static int graspper_control_time_threshold = 6;
-    if ( m_graspper_control_time >= graspper_control_time_threshold )
+    // static int graspper_control_time_threshold = 6;
+    if ( m_graspper_control_time >= PA_GRASPPER_CONTROL_TIME )
     {
         m_graspper_control_time = 0;
         ROS_INFO_STREAM( "graspper  finish" );
@@ -451,15 +451,15 @@ void RMChallengeFSM::controlDroneVelocity( float x, float y, float z, float yaw 
 }
 void RMChallengeFSM::droneGoUp()
 {
-    static float go_up_velocity = 0.2;
+    // static float go_up_velocity = 0.2;
     if ( m_goal_height[m_current_takeoff_point_id] > m_current_height_from_guidance )
     {
-        controlDroneVelocity( 0.0, 0.0, go_up_velocity, 0.0 );
+        controlDroneVelocity( 0.0, 0.0, PA_GO_UP_VELOCITY, 0.0 );
         ROS_INFO_STREAM( "go up" );
     }
     else
     {
-        controlDroneVelocity( 0.0, 0.0, -go_up_velocity, 0.0 );
+        controlDroneVelocity( 0.0, 0.0, -PA_GO_UP_VELOCITY, 0.0 );
         ROS_INFO_STREAM( "go down" );
     }
 }
@@ -478,15 +478,18 @@ void RMChallengeFSM::droneTrackLine()
     float vt_x, vt_y;
     float vn_x, vn_y;
     float v_z, yaw;
-    static float goal_height = 10;
-    static float height_threshold = 0.5;
-    static float const_vz = 10;
+    // static float goal_height = 10;
+    // static float height_threshold = 0.5;
+    // static float const_vz = 10;
     calculateTangentialVelocity( vt_x, vt_y, YELLOW_LINE );
     calculateNormalVelocity( vn_x, vn_y, YELLOW_LINE );
     calculateYawRate( yaw );
-    if ( fabs( m_current_height_from_guidance - goal_height ) > height_threshold )
+    if ( fabs( m_current_height_from_guidance - PA_FLYING_HEIGHT ) >
+         PA_FLYING_HEIGHT_THRESHOLD )
     {
-        v_z = goal_height > m_current_height_from_guidance ? const_vz : -const_vz;
+        v_z = PA_FLYING_HEIGHT > m_current_height_from_guidance ?
+                  PA_FLYING_Z_VELOCITY :
+                  -PA_FLYING_Z_VELOCITY;
     }
     ROS_INFO_STREAM( "\n t:" << vt_x << "," << vt_y << "\n"
                              << "n:" << vn_x << "," << vn_y << "\n"
@@ -501,23 +504,23 @@ void RMChallengeFSM::droneHover()
 }
 bool RMChallengeFSM::readyToLand()
 {
-    static float height_error_threshold = 1;
-    static float landpoint_pos_err_threshold = 0.03;
-    static float goal_land_height = 0;
+    // static float height_error_threshold = 1;
+    // static float landpoint_pos_err_threshold = 0.03;
+    // static float goal_land_height = 0;
     float land_err = sqrt( pow( m_landpoint_position_error[0], 2 ) +
                            pow( m_landpoint_position_error[1], 2 ) );
     float height_error;
     if ( m_land_point_type == BASE_LAND_POINT )
     {
-        height_error = fabs( goal_land_height - m_current_height_from_guidance );
+        height_error = fabs( PA_LAND_HEIGHT - m_current_height_from_guidance );
     }
     else if ( m_land_point_type == PILLAR_LAND_POINT )
     {
         /* code */
-        height_error = fabs( goal_land_height - m_current_height_from_vision );
+        height_error = fabs( PA_LAND_HEIGHT - m_current_height_from_vision );
     }
-    if ( height_error < height_error_threshold &&
-         land_err < landpoint_pos_err_threshold )
+    if ( height_error < PA_LAND_HEIGHT_THRESHOLD &&
+         land_err < PA_LAND_POSITION_THRESHOLD_LOW )
     {
         m_prepare_to_land_type = PREPARE_AT_HIGH;
         ROS_INFO_STREAM( "ready to land," << land_err << "," << height_error );
@@ -531,31 +534,31 @@ bool RMChallengeFSM::readyToLand()
 }
 void RMChallengeFSM::dronePrepareToLand()
 {
-    static float const_vz = 10;
+    // static float const_vz = 10;
     float vx, vy, vz;
     if ( m_land_point_type == BASE_LAND_POINT )
     {
-        static float goal_height = 10;
-        static float height_threshold = 10;
-        static float kp_base = 10;
-        if ( fabs( m_current_height_from_guidance - goal_height ) >
-             height_threshold )
+        // static float goal_height = 10;
+        // static float height_threshold = 10;
+        // static float kp_base = 10KP_BASE
+        if ( fabs( m_current_height_from_guidance - PA_LAND_HEIGHT ) >
+             PA_LAND_HEIGHT_THRESHOLD )
         {
-            if ( goal_height > m_current_height_from_guidance )
+            if ( PA_LAND_HEIGHT > m_current_height_from_guidance )
             {
-                vz = const_vz;
+                vz = PA_LAND_Z_VELOCITY;
             }
             else
             {
-                vz = -const_vz;
+                vz = -PA_LAND_Z_VELOCITY;
             }
         }
         else
         {
             vz = 0;
         }
-        vx = kp_base * m_landpoint_position_error[0];
-        vy = kp_base * m_landpoint_position_error[1];
+        vx = PA_KP_BASE * m_landpoint_position_error[0];
+        vy = PA_KP_BASE * m_landpoint_position_error[1];
     }
     else if ( m_land_point_type == PILLAR_LAND_POINT )
     {
@@ -576,32 +579,32 @@ void RMChallengeFSM::navigateByCircle( float &vx, float &vy, float &vz )
     if ( m_prepare_to_land_type == PREPARE_AT_HIGH )
     {
         ROS_INFO_STREAM( "navigate high" );
-        static float xy_threshold_high = 0.3;
-        static float pillar_goal_height = 0;
-        static float height_threshold = 0.05;
-        static float v_min = 0.12;
-        static float k_p_pillar_height = 0.3;
+        // static float xy_threshold_high = 0.3;
+        // static float pillar_goal_height = 0;
+        // static float height_threshold = 0.05;
+        // static float v_min = 0.12;
+        // static float k_p_pillar_height = 0.3;
         float land_err = sqrt( pow( m_landpoint_position_error[0], 2 ) +
                                pow( m_landpoint_position_error[1], 2 ) );
-        if ( land_err > xy_threshold_high )
+        if ( land_err > PA_LAND_POSITION_THRESHOLD_HIGH )
         {
-            vx = k_p_pillar_height * m_landpoint_position_error[0];
-            vy = k_p_pillar_height * m_landpoint_position_error[1];
+            vx = PA_KP_PILLAR_HIGH * m_landpoint_position_error[0];
+            vy = PA_KP_PILLAR_HIGH * m_landpoint_position_error[1];
             vz = 0;
-            if ( fabs( vx ) < v_min )
-                vx = fabs( vx ) / ( vx + 0.0001 ) * v_min;
-            if ( fabs( vy ) < v_min )
-                vy = fabs( vy ) / ( vy + 0.0001 ) * v_min;
+            if ( fabs( vx ) < PA_V_MIN_HIGH )
+                vx = fabs( vx ) / ( vx + 0.0001 ) * PA_V_MIN_HIGH;
+            if ( fabs( vy ) < PA_V_MIN_HIGH )
+                vy = fabs( vy ) / ( vy + 0.0001 ) * PA_V_MIN_HIGH;
         }
         else
         {
             vx = vy = 0.0;
-            static float const_vz = 0.15;
-            float height_error = pillar_goal_height - m_current_height_from_vision;
-            if ( fabs( height_error ) > height_threshold )
+            // static float const_vz = 0.15;
+            float height_error = PA_LAND_HEIGHT - m_current_height_from_vision;
+            if ( fabs( height_error ) > PA_LAND_HEIGHT_THRESHOLD )
             {
                 vz = fabs( height_error ) / ( height_error + 0.0000000001 ) *
-                     const_vz;
+                     PA_LAND_Z_VELOCITY;
             }
             else
             {
@@ -614,79 +617,79 @@ void RMChallengeFSM::navigateByCircle( float &vx, float &vy, float &vz )
     else if ( m_prepare_to_land_type == PREPARE_AT_LOW )
     {
         ROS_INFO_STREAM( "navigate ai low" );
-        static float xy_threshold_high = 0.3;
-        static float v_min = 0.036;
-        static float k_p_pillar_low = 0.3;
-        vx = k_p_pillar_low * m_landpoint_position_error[0];
-        vy = k_p_pillar_low * m_landpoint_position_error[1];
+        // static float xy_threshold_high = 0.3;
+        // static float v_min = 0.036;
+        // static float k_p_pillar_low = 0.3;
+        vx = PA_KP_PILLAR_LOW * m_landpoint_position_error[0];
+        vy = PA_KP_PILLAR_LOW * m_landpoint_position_error[1];
         vz = 0;
-        if ( fabs( vx ) < v_min )
-            vx = fabs( vx ) / ( vx + 0.0001 ) * v_min;
-        if ( fabs( vy ) < v_min )
-            vy = fabs( vy ) / ( vy + 0.0001 ) * v_min;
+        if ( fabs( vx ) < PA_V_MIN_LOW )
+            vx = fabs( vx ) / ( vx + 0.0001 ) * PA_V_MIN_LOW;
+        if ( fabs( vy ) < PA_V_MIN_LOW )
+            vy = fabs( vy ) / ( vy + 0.0001 ) * PA_V_MIN_LOW;
     }
 }
 void RMChallengeFSM::navigateByTriangle( float &x, float &y, float &z )
 {
     int triangle_sum = m_pillar_triangle[0] + m_pillar_triangle[1] +
                        m_pillar_triangle[2] + m_pillar_triangle[3];
-    static float const_v = 0.15;
+    // static float const_v = 0.15;
     x = y = z = 0.0;
     if ( triangle_sum == 1 )
     {
         if ( m_pillar_triangle[0] == 1 )
         {
-            y = -const_v;
+            y = -PA_LAND_TRIANGLE_VELOCITY;
         }
         else if ( m_pillar_triangle[1] == 1 )
         {
-            x = -const_v;
+            x = -PA_LAND_TRIANGLE_VELOCITY;
         }
         else if ( m_pillar_triangle[2] == 1 )
         {
-            y = const_v;
+            y = PA_LAND_TRIANGLE_VELOCITY;
         }
         else if ( m_pillar_triangle[3] == 1 )
         {
-            x = const_v;
+            x = PA_LAND_TRIANGLE_VELOCITY;
         }
     }
     else if ( triangle_sum == 2 )
     {
         if ( m_pillar_triangle[0] == 1 )
         {
-            y = -const_v;
+            y = -PA_LAND_TRIANGLE_VELOCITY;
         }
         else if ( m_pillar_triangle[2] == 1 )
         {
-            y = const_v;
+            y = PA_LAND_TRIANGLE_VELOCITY;
         }
         if ( m_pillar_triangle[1] == 1 )
         {
-            x = -const_v;
+            x = -PA_LAND_TRIANGLE_VELOCITY;
         }
         else if ( m_pillar_triangle[3] == 1 )
         {
-            x = const_v;
+            x = PA_LAND_TRIANGLE_VELOCITY;
         }
     }
     else if ( triangle_sum == 3 )
     {
         if ( m_pillar_triangle[0] == 0 )
         {
-            y = const_v;
+            y = PA_LAND_TRIANGLE_VELOCITY;
         }
         else if ( m_pillar_triangle[1] == 0 )
         {
-            x = const_v;
+            x = PA_LAND_TRIANGLE_VELOCITY;
         }
         else if ( m_pillar_triangle[2] == 0 )
         {
-            y = -const_v;
+            y = -PA_LAND_TRIANGLE_VELOCITY;
         }
         else if ( m_pillar_triangle[3] == 0 )
         {
-            x = -const_v;
+            x = -PA_LAND_TRIANGLE_VELOCITY;
         }
     }
 }
@@ -701,7 +704,7 @@ void RMChallengeFSM::unitifiyVector( float &x, float &y )
 void RMChallengeFSM::calculateNormalVelocity( float &x, float &y,
                                               LINE_TYPE line_type )
 {
-    static float k_n = 1;
+    // static float k_n = 1;
     if ( line_type == VIRTUAL_LINE )
     {
         static float xc = m_current_position_from_guidance[0];
@@ -715,48 +718,48 @@ void RMChallengeFSM::calculateNormalVelocity( float &x, float &y,
         float x_n = ( x0 - xc ) + t * ( xs - x0 );
         float y_n = ( y0 - yc ) + t * ( ys - y0 );
         unitifiyVector( x_n, y_n );
-        x = k_n * x_n;
-        y = k_n * y_n;
+        x = PA_KN * x_n;
+        y = PA_KN * y_n;
     }
     else if ( line_type == YELLOW_LINE )
     {
         unitifiyVector( m_distance_to_line[0], m_distance_to_line[1] );
-        x = k_n * m_distance_to_line[0];
-        y = k_n * m_distance_to_line[1];
+        x = PA_KN * m_distance_to_line[0];
+        y = PA_KN * m_distance_to_line[1];
     }
 }
 void RMChallengeFSM::calculateTangentialVelocity( float &x, float &y,
                                                   LINE_TYPE line_type )
 {
-    static float k_t = 1;
+    // static float k_t = 1;
     if ( line_type == VIRTUAL_LINE )
     {
         static float x0 = m_takeoff_points[m_current_takeoff_point_id][0];
         static float y0 = m_takeoff_points[m_current_takeoff_point_id][1];
         static float xs = m_setpoints[m_current_takeoff_point_id][0];
         static float ys = m_setpoints[m_current_takeoff_point_id][1];
-        x = k_t * ( xs - x0 ) / sqrt( pow( xs - x0, 2 ) + pow( ys - y0, 2 ) );
-        y = k_t * ( ys - y0 ) / sqrt( pow( xs - x0, 2 ) + pow( ys - y0, 2 ) );
+        x = PA_KT * ( xs - x0 ) / sqrt( pow( xs - x0, 2 ) + pow( ys - y0, 2 ) );
+        y = PA_KT * ( ys - y0 ) / sqrt( pow( xs - x0, 2 ) + pow( ys - y0, 2 ) );
     }
     else if ( line_type == YELLOW_LINE )
     {
         unitifiyVector( m_line_normal[0], m_line_normal[1] );
         if ( m_current_takeoff_point_id == 3 || m_current_takeoff_point_id == 4 )
         {
-            x = -k_t * m_line_normal[0];
-            y = -k_t * m_line_normal[1];
+            x = -PA_KT * m_line_normal[0];
+            y = -PA_KT * m_line_normal[1];
         }
         else  // 0,1,2,5
         {
-            x = k_t * m_line_normal[0];
-            y = k_t * m_line_normal[1];
+            x = PA_KT * m_line_normal[0];
+            y = PA_KT * m_line_normal[1];
         }
     }
 }
 void RMChallengeFSM::calculateYawRate( float &yaw )
 {
-    static float angle_threshold = 5;
-    static float yaw_rate = 10;
+    // static float angle_threshold = 5;
+    // static float yaw_rate = 10;
     float angle_to_line_1 = 57.3 * acos( m_line_normal[0] );
     float angle_to_line_2 =
         57.3 * acos( m_line_normal[0] * 0.5 - m_line_normal[1] * sqrt( 0.75 ) );
@@ -764,17 +767,17 @@ void RMChallengeFSM::calculateYawRate( float &yaw )
                                            << angle_to_line_2 );
     if ( fabs( angle_to_line_1 ) < fabs( angle_to_line_2 ) )
     {
-        if ( fabs( angle_to_line_1 ) > angle_threshold )
+        if ( fabs( angle_to_line_1 ) > PA_ANGLE_THRESHOLD )
         {
-            yaw = m_line_normal[1] > 0 ? -yaw_rate : yaw_rate;
+            yaw = m_line_normal[1] > 0 ? -PA_YAW_RATE : PA_YAW_RATE;
         }
     }
     else
     {
-        if ( fabs( angle_to_line_2 ) > angle_threshold )
+        if ( fabs( angle_to_line_2 ) > PA_ANGLE_THRESHOLD )
         {
             float sign = m_line_normal[0] * sqrt( 0.75 ) + m_line_normal[1] * 0.5;
-            yaw = sign > 0 ? -yaw_rate : yaw_rate;
+            yaw = sign > 0 ? -PA_YAW_RATE : PA_YAW_RATE;
         }
     }
 }
