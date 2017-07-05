@@ -11,143 +11,154 @@ RMChallengeFSM::~RMChallengeFSM()
 void RMChallengeFSM::run()
 {
     ROS_INFO_STREAM( "running: state is:" << m_state );
-    if ( m_state == TAKE_OFF )  //
-    {
-        // send take off command to uav until state change
-        if ( !isTakingoff() )
-        {
-            /* send take off command to uav*/
-            closeGraspper();
-            droneTakeoff();
-            updateTakeoffTime();
-            ros::Duration( 1.0 ).sleep();
-        }
-        else
-        {
-            if ( isTakingoff() && !isTakeoffTimeout() )
-            {
-                /* wait for time out */
-                ros::Duration( 0.5 ).sleep();
-            }
-            else if ( isTakeoffTimeout() )
-            {
-                /* state change to GO_UP*/
-                transferToTask( GO_UP );
-            }
-        }
-    }
-    else if ( m_state == GO_UP )  //
-    {
-        /* not reach goal height */
-        if ( !closeToGoalHeight() )
-        {
-            /* uav go up*/
-            droneGoUp();
-        }
-        else if ( closeToGoalHeight() )
-        {
-            /* change state to setpoint*/
-            transferToTask( GO_TO_SETPOINT );
-        }
-    }
-    else if ( m_state == GO_TO_SETPOINT )  //
-    {
-        if ( !farFromTakeoffPoint() )
-        {
-            droneGoToSetPoint();
-        }
-        else if ( discoverLandPoint() )
-        {
-            transferToTask( GO_TO_LAND_POINT );
-        }
-        else if ( discoverYellowLine() )
-        {
-            transferToTask( TRACK_LINE );
-        }
-        else if ( !discoverLandPoint() && !discoverYellowLine() &&
-                  !closeToSetPoint() )
-        {
-            droneGoToSetPoint();
-        }
-        else
-        {
-            transferToTask( IDLE );
-        }
-    }
-    else if ( m_state == TRACK_LINE )
-    {
-        if ( !discoverLandPoint() )
-        {
-            /* track detectLine */
-            droneTrackLine();
-        }
-        else
-        {
-            /* state change to land */
-            transferToTask( GO_TO_LAND_POINT );
-        }
-    }
-    else if ( m_state == GO_TO_LAND_POINT )
-    {
-        if ( !readyToLand() )
-        {
-            /* go to land point */
-            dronePrepareToLand();
-        }
-        else
-        {
-            /* land*/
-            transferToTask( LAND );
-        }
-    }
-    else if ( m_state == LAND )
-    {
-        if ( !isOnLand() )
-        {
-            /* continue to land */
-            openGraspper();
-            droneLand();
-        }
-        else if ( isOnLand() )
-        {
-            droneHover();
-            droneDropDown();
-            transferToTask( CONTROL_GRASPPER );
-        }
-    }
-    else if ( m_state == CONTROL_GRASPPER )  //
-    {
-        if ( !finishGraspperTask() )
-        {
-            /* continue graspper control */
-            controlGraspper();
-        }
-        else
-        {
-            /* state change to take off*/
-            closeGraspper();
-            transferToTask( TAKE_OFF );
-        }
-    }
-    else if ( m_state == IDLE )  //
-    {
-        /* code */
-        if ( discoverLandPoint() )
-        {
-            transferToTask( GO_TO_LAND_POINT );
-        }
-        else if ( discoverYellowLine() )
-        {
-            /* track detectLine*/
-            transferToTask( TRACK_LINE );
-        }
-        else
-        {
-            // do nothing, wait
-            droneHover();
-            ros::Duration( 0.5 ).sleep();
-        }
-    }
+	switch(m_state)
+	{
+		case TAKE_OFF:  //
+		{
+			// send take off command to uav until state change
+			if ( !isTakingoff() )
+			{
+				/* send take off command to uav*/
+				closeGraspper();
+				droneTakeoff();
+				updateTakeoffTime();
+				ros::Duration( 1.0 ).sleep();
+			}
+			else
+			{
+				if ( isTakingoff() && !isTakeoffTimeout() )
+				{
+					/* wait for time out */
+					ros::Duration( 0.5 ).sleep();
+				}
+				else if ( isTakeoffTimeout() )
+				{
+					/* state change to GO_UP*/
+					transferToTask( GO_UP );
+				}
+			}
+		}
+		break;
+		case  GO_UP:  //
+		{
+			/* not reach goal height */
+			if ( !closeToGoalHeight() )
+			{
+				/* uav go up*/
+				droneGoUp();
+			}
+			else if ( closeToGoalHeight() )
+			{
+				/* change state to setpoint*/
+				transferToTask( GO_TO_SETPOINT );
+			}
+		}
+		break;
+		case GO_TO_SETPOINT :  //
+		{
+			if ( !farFromTakeoffPoint() )
+			{
+				droneGoToSetPoint();
+			}
+			else if ( discoverLandPoint() )
+			{
+				transferToTask( GO_TO_LAND_POINT );
+			}
+			else if ( discoverYellowLine() )
+			{
+				transferToTask( TRACK_LINE );
+			}
+			else if ( !discoverLandPoint() && !discoverYellowLine() &&
+						!closeToSetPoint() )
+			{
+				droneGoToSetPoint();
+			}
+			else
+			{
+				transferToTask( IDLE );
+			}
+		}
+		break;
+		case  TRACK_LINE :
+		{
+			if ( !discoverLandPoint() )
+			{
+				/* track detectLine */
+				droneTrackLine();
+			}
+			else
+			{
+				/* state change to land */
+				transferToTask( GO_TO_LAND_POINT );
+			}
+		}
+		break;
+		case GO_TO_LAND_POINT :
+		{
+			if ( !readyToLand() )
+			{
+				/* go to land point */
+				dronePrepareToLand();
+			}
+			else
+			{
+				/* land*/
+				transferToTask( LAND );
+			}
+		}
+		break;
+		case LAND:
+		{
+			if ( !isOnLand() )
+			{
+				/* continue to land */
+				openGraspper();
+				droneLand();
+			}
+			else if ( isOnLand() )
+			{
+				droneHover();
+				droneDropDown();
+				transferToTask( CONTROL_GRASPPER );
+			}
+		}
+		break;
+		case CONTROL_GRASPPER :  //
+		{
+			if ( !finishGraspperTask() )
+			{
+				/* continue graspper control */
+				controlGraspper();
+			}
+			else
+			{
+				/* state change to take off*/
+				closeGraspper();
+				transferToTask( TAKE_OFF );
+			}
+		}
+		break;
+		case  IDLE :  //
+		{
+			/* code */
+			if ( discoverLandPoint() )
+			{
+				transferToTask( GO_TO_LAND_POINT );
+			}
+			else if ( discoverYellowLine() )
+			{
+				/* track detectLine*/
+				transferToTask( TRACK_LINE );
+			}
+			else
+			{
+				// do nothing, wait
+				droneHover();
+				ros::Duration( 0.5 ).sleep();
+			}
+		}
+		break;
+	}
 }
 void RMChallengeFSM::resetAllState()
 {
