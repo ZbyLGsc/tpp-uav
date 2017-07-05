@@ -188,5 +188,6 @@ void timer_callback( const ros::TimerEvent &evt )
     {
         /*not F mode, need to reset fsm*/
         g_fsm.resetAllState();
+        ROS_INFO( "Wait for F mode" );
     }
 }
