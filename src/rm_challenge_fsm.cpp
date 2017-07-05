@@ -3,6 +3,10 @@
 RMChallengeFSM::~RMChallengeFSM()
 {
     delete m_serial_port;
+#if CURRENT_COMPUTER == MANIFOLD
+    m_drone->release_sdk_permission_control();
+    delete m_drone;
+#endif
 }
 void RMChallengeFSM::run()
 {
@@ -16,6 +20,7 @@ void RMChallengeFSM::run()
             closeGraspper();
             droneTakeoff();
             updateTakeoffTime();
+            ros::Duration( 1.0 ).sleep();
         }
         else
         {
@@ -66,7 +71,6 @@ void RMChallengeFSM::run()
         }
         else
         {
-            /* code */
             transferToTask( IDLE );
         }
     }
@@ -106,6 +110,8 @@ void RMChallengeFSM::run()
         }
         else if ( isOnLand() )
         {
+            droneHover();
+            droneDropDown();
             transferToTask( CONTROL_GRASPPER );
         }
     }
@@ -143,10 +149,17 @@ void RMChallengeFSM::run()
         }
     }
 }
-void RMChallengeFSM::updateState()
+void RMChallengeFSM::resetAllState()
 {
+    m_state = TAKE_OFF;
+    m_current_position_from_guidance[0] = 0.0;
+    m_current_position_from_guidance[1] = 0.0;
+    m_prepare_to_land_type = PREPARE_AT_HIGH;
+    m_graspper_control_time = 0;
+    m_current_takeoff_point_id = 0;
+    m_land_counter = 0;
 }
-void RMChallengeFSM::initialize()
+void RMChallengeFSM::initialize( ros::NodeHandle &node_handle )
 {
     /*initialize serial port*/
     m_serial_port = new boost::asio::serial_port( m_io_service );
@@ -159,12 +172,26 @@ void RMChallengeFSM::initialize()
     m_serial_port->set_option( serial_port::stop_bits( serial_port::stop_bits::one ),
                                m_err_code );
     m_serial_port->set_option( serial_port::character_size( 8 ), m_err_code );
-    /*initial  state*/
-    m_uav_state = UAV_LAND;
-    m_land_point_type = PILLAR_LAND_POINT;
-    m_prepare_to_land_type = PREPARE_AT_HIGH;
-    m_state = TAKE_OFF;
-    m_graspper_state = GRASPPER_CLOSE;
+
+/*initialize dji sdk*/
+#if CURRENT_COMPUTER == MANIFOLD
+    m_drone = new DJIDrone( node_handle );
+    m_drone->request_sdk_permission_control();
+#endif
+
+    /*initialize parameter*/
+    for ( int i = 0; i < TAKEOFF_POINT_NUMBER; ++i )
+    {
+        /* only set for one time */
+        m_goal_height[i] = 2.0;
+        m_takeoff_points[i][0] = 0.0;
+        m_takeoff_points[i][1] = 0.0;
+        m_setpoints[i][0] = 8.0;
+        m_setpoints[i][1] = 0.7;
+    }
+
+    /*initialize  state*/
+    resetAllState();
 
     /*just test some function, need to be delete later*/
     // m_current_height_from_guidance = 5;
@@ -265,6 +292,10 @@ bool RMChallengeFSM::isOnLand()
     if ( m_uav_state == UAV_LAND )
     {
         ROS_INFO_STREAM( "on land" );
+        if ( m_current_takeoff_point_id < TAKEOFF_POINT_NUMBER - 1 )
+        {
+            m_current_takeoff_point_id += 1;
+        }
         return true;
     }
     else
@@ -412,9 +443,15 @@ bool RMChallengeFSM::finishGraspperTask()
 }
 void RMChallengeFSM::droneTakeoff()
 {
+#if CURRENT_COMPUTER == MANIFOLD
+    m_drone->takeoff();
+#endif
 }
 void RMChallengeFSM::droneLand()
 {
+#if CURRENT_COMPUTER == MANIFOLD
+    m_drone->landing();
+#endif
 }
 void RMChallengeFSM::openGraspper()
 {
@@ -448,6 +485,10 @@ void RMChallengeFSM::updateTakeoffTime()
 }
 void RMChallengeFSM::controlDroneVelocity( float x, float y, float z, float yaw )
 {
+#if CURRENT_COMPUTER == MANIFOLD
+    m_drone->attitude_control( 0x4B, x, y, z, yaw );
+#endif
+    ros::Duration( 20 / 1000 ).sleep();
 }
 void RMChallengeFSM::droneGoUp()
 {
@@ -502,6 +543,13 @@ void RMChallengeFSM::droneHover()
     controlDroneVelocity( 0, 0, 0, 0 );
     ros::Duration( 0.5 ).sleep();
 }
+
+void RMChallengeFSM::droneDropDown()
+{
+    for ( int i = 0; i < 200; i++ )
+        controlDroneVelocity( 0.0, 0.0, -1.2, 0.0 );
+}
+
 bool RMChallengeFSM::readyToLand()
 {
     // static float height_error_threshold = 1;
@@ -513,23 +561,47 @@ bool RMChallengeFSM::readyToLand()
     if ( m_land_point_type == BASE_LAND_POINT )
     {
         height_error = fabs( PA_LAND_HEIGHT - m_current_height_from_guidance );
+        if ( height_error < PA_LAND_HEIGHT_THRESHOLD &&
+             land_err < PA_LAND_POSITION_THRESHOLD_LOW )
+        {
+            ROS_INFO_STREAM( "ready to land at base," << land_err << ","
+                                                      << height_error );
+            return true;
+        }
+        else
+        {
+            ROS_INFO_STREAM( "error too big," << land_err << "," << height_error );
+            return false;
+        }
     }
     else if ( m_land_point_type == PILLAR_LAND_POINT )
     {
-        /* code */
         height_error = fabs( PA_LAND_HEIGHT - m_current_height_from_vision );
-    }
-    if ( height_error < PA_LAND_HEIGHT_THRESHOLD &&
-         land_err < PA_LAND_POSITION_THRESHOLD_LOW )
-    {
-        m_prepare_to_land_type = PREPARE_AT_HIGH;
-        ROS_INFO_STREAM( "ready to land," << land_err << "," << height_error );
-        return true;
-    }
-    else
-    {
-        ROS_INFO_STREAM( "error too big," << land_err << "," << height_error );
-        return false;
+        if ( m_prepare_to_land_type == PREPARE_AT_LOW &&
+             land_err < PA_LAND_POSITION_THRESHOLD_LOW )
+        {
+            m_land_counter++;
+            if ( m_land_counter >= PA_LAND_COUNT )
+            {
+                m_prepare_to_land_type = PREPARE_AT_HIGH;
+                m_land_counter = 0;
+                ROS_INFO_STREAM( "ready to land at pillar ," << land_err << ","
+                                                             << height_error );
+                return true;
+            }
+            else
+            {
+                ROS_INFO_STREAM( "counter not enough," << land_err << ","
+                                                       << height_error << ","
+                                                       << m_land_counter );
+                return false;
+            }
+        }
+        else
+        {
+            ROS_INFO_STREAM( "error too big," << land_err << "," << height_error );
+            return false;
+        }
     }
 }
 void RMChallengeFSM::dronePrepareToLand()
@@ -542,16 +614,11 @@ void RMChallengeFSM::dronePrepareToLand()
         // static float height_threshold = 10;
         // static float kp_base = 10KP_BASE
         if ( fabs( m_current_height_from_guidance - PA_LAND_HEIGHT ) >
-             PA_LAND_HEIGHT_THRESHOLD )
+             PA_BASE_HEIGHT_THRESHOLD )
         {
-            if ( PA_LAND_HEIGHT > m_current_height_from_guidance )
-            {
-                vz = PA_LAND_Z_VELOCITY;
-            }
-            else
-            {
-                vz = -PA_LAND_Z_VELOCITY;
-            }
+            vz = PA_LAND_HEIGHT > m_current_height_from_guidance ?
+                     PA_LAND_Z_VELOCITY :
+                     -PA_LAND_Z_VELOCITY;
         }
         else
         {
@@ -798,12 +865,31 @@ void RMChallengeFSM::setHeightFromGuidance( float height )
     m_current_height_from_guidance = height;
     ROS_INFO_STREAM( "height from guidance is:" << m_current_height_from_guidance );
 }
+/**
+*set position from guidance
+*when on land, bias of guidance position is updated
+*when flying, use real time gudance position and bias to
+*update actual guidance position
+*/
 void RMChallengeFSM::setPositionFromGuidance( float x, float y )
 {
-    m_current_position_from_guidance[0] = x;
-    m_current_position_from_guidance[1] = y;
-    ROS_INFO_STREAM( "pos from gui is:" << m_current_position_from_guidance[0] << ","
-                                        << m_current_position_from_guidance[1] );
+    if ( m_uav_state == UAV_LAND )
+    {
+        /* update guidance bias*/
+        m_guidance_bias[0] = x - m_current_position_from_guidance[0];
+        m_guidance_bias[1] = y - m_current_position_from_guidance[1];
+        ROS_INFO_STREAM( "guidance bisa is:" << m_guidance_bias[0] << ","
+                                             << m_guidance_bias[1] );
+    }
+    else if ( m_uav_state == UAV_FLY )
+    {
+        /* update actual position */
+        m_current_position_from_guidance[0] = x - m_guidance_bias[0];
+        m_current_position_from_guidance[1] = y - m_guidance_bias[1];
+        ROS_INFO_STREAM( "pos from gui is:" << m_current_position_from_guidance[0]
+                                            << ","
+                                            << m_current_position_from_guidance[1] );
+    }
 }
 void RMChallengeFSM::setCircleVariables( bool is_circle_found,
                                          float position_error[2], float height )
