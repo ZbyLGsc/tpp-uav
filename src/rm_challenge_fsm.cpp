@@ -17,47 +17,8 @@ void RMChallengeFSM::run()
     ROS_INFO_STREAM( "running: state is:" << m_state );
 	switch(m_state)
 	{
-		case TAKE_OFF:  //
-		{
-			// send take off command to uav until state change
-			if ( !isTakingoff() )
-			{
-				/* send take off command to uav*/
-				closeGraspper();
-				droneTakeoff();
-				updateTakeoffTime();
-				ros::Duration( 1.0 ).sleep();
-			}
-			else
-			{
-				if ( isTakingoff() && !isTakeoffTimeout() )
-				{
-					/* wait for time out */
-					ros::Duration( 0.5 ).sleep();
-				}
-				else if ( isTakeoffTimeout() )
-				{
-					/* state change to GO_UP*/
-					transferToTask( GO_UP );
-				}
-			}
-		}
-		break;
-		case  GO_UP:  //
-		{
-			/* not reach goal height */
-			if ( !closeToGoalHeight() )
-			{
-				/* uav go up*/
-				droneGoUp();
-			}
-			else if ( closeToGoalHeight() )
-			{
-				/* change state to setpoint*/
-				transferToTask( GO_TO_SETPOINT );
-			}
-		}
-		break;
+
+
 		case GO_TO_SETPOINT :  //
 		{
 			if ( !farFromTakeoffPoint() )
