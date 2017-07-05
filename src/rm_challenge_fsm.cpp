@@ -160,6 +160,10 @@ void RMChallengeFSM::run()
 		break;
 	}
 }
+void anotherTest()
+{
+	//here is another test function
+}
 void RMChallengeFSM::resetAllState()
 {
     m_state = TAKE_OFF;
