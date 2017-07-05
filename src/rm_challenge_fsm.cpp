@@ -8,126 +8,146 @@ RMChallengeFSM::~RMChallengeFSM()
     delete m_drone;
 #endif
 }
-void testGithub()
-{
-	//this function only write for testing github
-}
 void RMChallengeFSM::run()
 {
     ROS_INFO_STREAM( "running: state is:" << m_state );
-	switch(m_state)
-	{
-
-
-		case GO_TO_SETPOINT :  //
-		{
-			if ( !farFromTakeoffPoint() )
-			{
-				droneGoToSetPoint();
-			}
-			else if ( discoverLandPoint() )
-			{
-				transferToTask( GO_TO_LAND_POINT );
-			}
-			else if ( discoverYellowLine() )
-			{
-				transferToTask( TRACK_LINE );
-			}
-			else if ( !discoverLandPoint() && !discoverYellowLine() &&
-						!closeToSetPoint() )
-			{
-				droneGoToSetPoint();
-			}
-			else
-			{
-				transferToTask( IDLE );
-			}
-		}
-		break;
-		case  TRACK_LINE :
-		{
-			if ( !discoverLandPoint() )
-			{
-				/* track detectLine */
-				droneTrackLine();
-			}
-			else
-			{
-				/* state change to land */
-				transferToTask( GO_TO_LAND_POINT );
-			}
-		}
-		break;
-		case GO_TO_LAND_POINT :
-		{
-			if ( !readyToLand() )
-			{
-				/* go to land point */
-				dronePrepareToLand();
-			}
-			else
-			{
-				/* land*/
-				transferToTask( LAND );
-			}
-		}
-		break;
-		case LAND:
-		{
-			if ( !isOnLand() )
-			{
-				/* continue to land */
-				openGraspper();
-				droneLand();
-			}
-			else if ( isOnLand() )
-			{
-				droneHover();
-				droneDropDown();
-				transferToTask( CONTROL_GRASPPER );
-			}
-		}
-		break;
-		case CONTROL_GRASPPER :  //
-		{
-			if ( !finishGraspperTask() )
-			{
-				/* continue graspper control */
-				controlGraspper();
-			}
-			else
-			{
-				/* state change to take off*/
-				closeGraspper();
-				transferToTask( TAKE_OFF );
-			}
-		}
-		break;
-		case  IDLE :  //
-		{
-			/* code */
-			if ( discoverLandPoint() )
-			{
-				transferToTask( GO_TO_LAND_POINT );
-			}
-			else if ( discoverYellowLine() )
-			{
-				/* track detectLine*/
-				transferToTask( TRACK_LINE );
-			}
-			else
-			{
-				// do nothing, wait
-				droneHover();
-				ros::Duration( 0.5 ).sleep();
-			}
-		}
-		break;
-	}
-}
-void anotherTest()
-{
-	//here is another test function
+    if ( m_state == TAKE_OFF )  //
+    {
+        // send take off command to uav until state change
+        if ( !isTakingoff() )
+        {
+            /* send take off command to uav*/
+            closeGraspper();
+            droneTakeoff();
+            updateTakeoffTime();
+            ros::Duration( 1.0 ).sleep();
+        }
+        else
+        {
+            if ( isTakingoff() && !isTakeoffTimeout() )
+            {
+                /* wait for time out */
+                ros::Duration( 0.5 ).sleep();
+            }
+            else if ( isTakeoffTimeout() )
+            {
+                /* state change to GO_UP*/
+                transferToTask( GO_UP );
+            }
+        }
+    }
+    else if ( m_state == GO_UP )  //
+    {
+        /* not reach goal height */
+        if ( !closeToGoalHeight() )
+        {
+            /* uav go up*/
+            droneGoUp();
+        }
+        else if ( closeToGoalHeight() )
+        {
+            /* change state to setpoint*/
+            transferToTask( GO_TO_SETPOINT );
+        }
+    }
+    else if ( m_state == GO_TO_SETPOINT )  //
+    {
+        if ( !farFromTakeoffPoint() )
+        {
+            droneGoToSetPoint();
+        }
+        else if ( discoverLandPoint() )
+        {
+            transferToTask( GO_TO_LAND_POINT );
+        }
+        else if ( discoverYellowLine() )
+        {
+            transferToTask( TRACK_LINE );
+        }
+        else if ( !discoverLandPoint() && !discoverYellowLine() &&
+                  !closeToSetPoint() )
+        {
+            droneGoToSetPoint();
+        }
+        else
+        {
+            transferToTask( IDLE );
+        }
+    }
+    else if ( m_state == TRACK_LINE )
+    {
+        if ( !discoverLandPoint() )
+        {
+            /* track detectLine */
+            droneTrackLine();
+        }
+        else
+        {
+            /* state change to land */
+            transferToTask( GO_TO_LAND_POINT );
+        }
+    }
+    else if ( m_state == GO_TO_LAND_POINT )
+    {
+        if ( !readyToLand() )
+        {
+            /* go to land point */
+            dronePrepareToLand();
+        }
+        else
+        {
+            /* land*/
+            transferToTask( LAND );
+        }
+    }
+    else if ( m_state == LAND )
+    {
+        if ( !isOnLand() )
+        {
+            /* continue to land */
+            openGraspper();
+            droneLand();
+        }
+        else if ( isOnLand() )
+        {
+            droneHover();
+            droneDropDown();
+            transferToTask( CONTROL_GRASPPER );
+        }
+    }
+    else if ( m_state == CONTROL_GRASPPER )  //
+    {
+        if ( !finishGraspperTask() )
+        {
+            /* continue graspper control */
+            controlGraspper();
+        }
+        else
+        {
+            /* state change to take off*/
+            closeGraspper();
+            transferToTask( TAKE_OFF );
+        }
+    }
+    else if ( m_state == IDLE )  //
+    {
+        /* code */
+        if ( discoverLandPoint() )
+        {
+            transferToTask( GO_TO_LAND_POINT );
+        }
+        else if ( discoverYellowLine() )
+        {
+            /* track detectLine*/
+            transferToTask( TRACK_LINE );
+        }
+        else
+        {
+            // do nothing, wait
+            droneHover();
+            ros::Duration( 0.5 ).sleep();
+        }
+    }
 }
 void RMChallengeFSM::resetAllState()
 {
@@ -138,6 +158,10 @@ void RMChallengeFSM::resetAllState()
     m_graspper_control_time = 0;
     m_current_takeoff_point_id = 0;
     m_land_counter = 0;
+#if CURRENT_COMPUTER == MANIFOLD
+    m_drone->request_sdk_permission_control();
+#endif
+    ros::Duration( 1.0 ).sleep();
 }
 void RMChallengeFSM::initialize( ros::NodeHandle &node_handle )
 {
@@ -156,7 +180,6 @@ void RMChallengeFSM::initialize( ros::NodeHandle &node_handle )
 /*initialize dji sdk*/
 #if CURRENT_COMPUTER == MANIFOLD
     m_drone = new DJIDrone( node_handle );
-    m_drone->request_sdk_permission_control();
 #endif
 
     /*initialize parameter*/
