@@ -36,9 +36,11 @@ int main( int argc, char **argv )
     // cv::VideoCapture cap( "/home/zby/uav_slam_ws/src/rm_uav/res/color_ball4.avi"
     // );
     cv::VideoCapture g_cap;
-    g_cap.open( "/home/zby/uav_slam_ws/src/rm_uav/res/color_ball4.avi" );
+    //    g_cap.open( "/home/zby/uav_slam_ws/src/rm_uav/res/color_ball4.avi" );
+    g_cap.open( 0 );
     if ( !g_cap.isOpened() )
     {
+        ROS_INFO( "camera not open" );
         return -1;
     }
     RMChallengeVision vision;
@@ -62,7 +64,7 @@ int main( int argc, char **argv )
                          << "\n" );
 
         /*test detect pillar circle and triangles*/
-        ROS_INFO_STREAM("detect pillar");
+        ROS_INFO_STREAM( "detect pillar" );
         RMChallengeVision::PILLAR_RESULT pillar_result;
         float pos_err_x = 0, pos_err_y = 0, height = 0;
         vision.detectPillar( frame, pillar_result );
@@ -87,7 +89,7 @@ int main( int argc, char **argv )
 
         /*test detect yellow line*/
         // cv::imshow( "frame", frame );
-        ROS_INFO_STREAM("detect line");
+        ROS_INFO_STREAM( "detect line" );
         float distance_x, distance_y, line_vector_x, line_vector_y;
         // vision.detectLine( frame, distance_x, distance_y, line_vector_x,
         //                    line_vector_y );
@@ -121,6 +123,7 @@ int main( int argc, char **argv )
 //     ROS_INFO_STREAM( "process time" << g_processed_time );
 //     if ( g_processed_time > 0 )
 //         return;
+
 //     if ( g_cap.get( CV_CAP_PROP_POS_FRAMES ) >
 //          g_cap.get( CV_CAP_PROP_FRAME_COUNT ) - 2 )
 //     {
