@@ -796,3 +796,6 @@ bool RMChallengeVision::hasTri( Mat& src, int r, int val_max )
         return false;
     }
 }
+
+
+
