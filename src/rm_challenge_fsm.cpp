@@ -8,6 +8,10 @@ RMChallengeFSM::~RMChallengeFSM()
     delete m_drone;
 #endif
 }
+void testGithub()
+{
+	//this function only write for testing github
+}
 void RMChallengeFSM::run()
 {
     ROS_INFO_STREAM( "running: state is:" << m_state );
