@@ -1,193 +1,225 @@
-// ros
-#include <cv_bridge/cv_bridge.h>
-#include <geometry_msgs/Twist.h>
-#include <geometry_msgs/Vector3Stamped.h>
-#include <image_transport/image_transport.h>
-#include <sensor_msgs/LaserScan.h>
-#include <sensor_msgs/image_encodings.h>
-#include <std_msgs/Empty.h>
-#include <std_msgs/Int16.h>
-#include <std_msgs/UInt8.h>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/nonfree/nonfree.hpp>
+#include <opencv2/features2d/features2d.hpp>
+#include <opencv2/features2d/features2d.hpp>
+#include "opencv2/imgproc/imgproc.hpp"
+using namespace cv;
+
+#include <vector>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <cmath>
+#include <stdlib.h>
+using namespace std;
+
+#include <ros/ros.h>
 #include "std_msgs/String.h"
-#include <actionlib/client/simple_action_client.h>
-#include <actionlib/client/terminal_state.h>
 
-// my file
-#include "rm_challenge_fsm.h"
+class LeastSquare;
 
-#if CURRENT_COMPUTER == MANIFOLD
-dji_sdk::RCChannels g_rc_channels;
-void rc_channels_callback( const dji_sdk::RCChannels rc_channels );
-#endif
-
-RMChallengeFSM g_fsm;
-bool is_F_mode = false;
-
-void uav_state_callback( const std_msgs::UInt8::ConstPtr &msg );
-void guidance_distance_callback( const sensor_msgs::LaserScan &g_oa );
-void guidance_position_callback( const geometry_msgs::Vector3Stamped &g_pos );
-// void ultrasonic_callback(const sensor_msgs::LaserScan& g_ul) ;
-void vision_pillar_callback( const std_msgs::String::ConstPtr &msg );
-void vision_base_callback( const std_msgs::String::ConstPtr &msg );
-void vision_line_callback( const std_msgs::String::ConstPtr &msg );
-/**timer callback, control uav in a finite state machine*/
-void timer_callback( const ros::TimerEvent &evt );
-
-int main( int argc, char **argv )
+class RMChallengeVision
 {
-    ros::init( argc, argv, "rm_uav_challenge" );
-    ros::NodeHandle node;
-/*subscriber from dji node*/
-#if CURRENT_COMPUTER == MANIFOLD
-    ros::Subscriber rc_channels_sub =
-        node.subscribe( "dji_sdk/rc_channels", 1, rc_channels_callback );
-#endif
-    ros::Subscriber uav_state_sub =
-        node.subscribe( "/dji_sdk/flight_status", 1, uav_state_callback );
-    ros::Subscriber guidance_distance_sub = node.subscribe(
-        "/guidance/obstacle_distance", 1, guidance_distance_callback );
-    ros::Subscriber guidance_position_sub =
-        node.subscribe( "/guidance/position", 1, guidance_position_callback );
-    // ultrasonic_sub =
-    //     my_node.subscribe("/guidance/ultrasonic", 1, ultrasonic_callback);
-    /*subscriber for vision*/
-    ros::Subscriber vision_pillar_sub =
-        node.subscribe( "tpp/pillar", 1, vision_pillar_callback );
-    ros::Subscriber vision_base_sub =
-        node.subscribe( "tpp/base", 1, vision_base_callback );
-    ros::Subscriber vision_line_sub =
-        node.subscribe( "tpp/yellow_line", 1, vision_line_callback );
-    ros::Timer timer =
-        node.createTimer( ros::Duration( 1.0 / 50.0 ), timer_callback );
-
-    /*initialize fsm*/
-    g_fsm.initialize( node );
-    ROS_INFO_STREAM( "initialize finish, start to run" );
-
-    /*test setter function of FSM*/
-    g_fsm.setDroneState( 3 );
-    //    g_fsm.setDroneState( 3 );
-    //    g_fsm.setDroneState( 4 );
-    g_fsm.setHeightFromGuidance( 0 );
-    g_fsm.setPositionFromGuidance( 7, 0 );
-    // float pos_err[2] = { 0.07, 0.3 };
-    // g_fsm.setCircleVariables( true, pos_err, 1.1 );
-    // g_fsm.setCircleVariables( false, pos_err, 1.1 );
-    // int tri[4] = { 1, 1, 0, 0 };
-    // g_fsm.setTriangleVariables( tri );
-    //    g_fsm.setBaseVariables( true, pos_err );
-    //    g_fsm.setBaseVariables( false, pos_err );
-    float dis[2] = { 0.3, 0.3 };
-    float nor[2] = { 1.3, -0.4 };
-    g_fsm.setLineVariables( dis, nor );
-    //    ros::Duration( 2.0 ).sleep();
-    /*test*/
-    ros::spin();
-    return 0;
-}
-
-#if CURRENT_COMPUTER == MANIFOLD
-void rc_channels_callback( const dji_sdk::RCChannels rc_channels )
-{
-    g_rc_channels = rc_channels;
-    if ( fabs( rc_channels.mode - 8000 ) < 0.000001 )
+  public:
+    RMChallengeVision()
     {
-        /*F mode is 8000,P :-8000 ,A: 0*/
-        if ( fabs( rc_channels.gear + 10000 ) < 0.000001 )
+    }
+    RMChallengeVision( bool visable );
+    enum COLOR_TYPE
+    {
+        RED,
+        GREEN,
+        BLUE
+    };
+    struct PILLAR_RESULT
+    {
+        int triangle[4];
+        bool circle_found;
+        Point2f circle_center;
+        float radius;
+    };
+    /**p0 angle point,return the cosine of angle*/
+    int detectPillar( Mat src, PILLAR_RESULT& pillar_result );
+    float angle( Point pt1, Point pt2, Point pt0 );
+    void detectTriangle( Mat src, Mat color_region, int triangle[4] );
+    void detectPillarCircle( Mat src, Mat color_region, bool& circle_found,
+                             Point2f& circle_center, float& rad );
+    void extractColor( Mat src, COLOR_TYPE color, Mat& colorRegion );
+    float imageToRealDistance( float imageLength, float imageDistance,
+                               float realLength );
+    float imageToHeight( float imageLength, float realLength );
+
+    /**yellow line related functions*/
+    void getYellowRegion( Mat& src, Mat& dst, int h_low = 30, int h_high = 75,
+                          int s_threshold = 80, int v_threshold = 80 );
+    void detectLine( Mat& src, float& distance_x, float& distance_y,
+                     float& line_vector_x, float& line_vector_y );
+    bool detectLineWithT( Mat& src, float& distance_x, float& distance_y,
+                          float& line_vector_x, float& line_vector_y );
+    bool getRectSide( Mat& src, vector< uchar >& side, int x, int y, int r );
+    bool isTri( Mat& src, int x, int y, int r );
+    bool hasTri( Mat& src, int r, int val_max );
+
+    /**set visability*/
+    void setVisability( bool visable );
+
+  private:
+    bool m_visable = true;
+};
+
+class LeastSquare
+{
+    float a, b, ah, bh;  //斜率a, 截距b
+  public:
+    bool is_kxb;
+    float tx, ty;
+    LeastSquare( const vector< int >& x,
+                 const vector< int >& y )  //构造函数，输入x，y坐标，得到斜率和截距
+    {
+        float t1 = 0, t2 = 0, t3 = 0, t4 = 0, t5 = 0;
+        for ( int i = 0; i < ( int )x.size(); ++i )
         {
-            /* gear up is -10000 ,gear down is -4545*/
-            is_F_mode = true;
+            t1 += x[i] * x[i];
+            t2 += x[i];
+            t3 += x[i] * y[i];
+            t4 += y[i];
+            t5 += y[i] * y[i];
+        }
+        a = ( t3 * x.size() - t2 * t4 ) / ( t1 * x.size() - t2 * t2 );
+        // b = (t4 - a*t2) / x.size();
+        b = ( t1 * t4 - t2 * t3 ) / ( t1 * x.size() - t2 * t2 );
+
+        // t1=0, t2=0, t3=0, t4=0;
+        /*for(int i=0; i<(int)x.size(); ++i)
+        {
+            t1 += y[i]*y[i];
+            t2 += y[i];
+            t3 += y[i]*x[i];
+            t4 += x[i];
+        }  */
+        ah = ( t3 * x.size() - t2 * t4 ) / ( t5 * x.size() - t4 * t4 );
+        // b = (t4 - a*t2) / x.size();
+        bh = ( t5 * t2 - t4 * t3 ) / ( t5 * x.size() - t4 * t4 );
+        float error1 = error_plan1( x, y ), error2 = error_plan2( x, y );
+        is_kxb = error1 < error2;  //比较误差，选择较小的方程
+        // error = is_kxb?error1:error2;
+        // error = min(error1,error2);
+        // avg = error/x.size();
+
+        if ( is_kxb )
+        {
+            tx = -1;
+            ty = -a;
+        }
+        else
+        {
+            tx = -ah;
+            ty = -1;
+        }
+        float length = sqrt( tx * tx + ty * ty );
+        tx = tx / length;
+        ty = ty / length;
+        if ( ( -tx - ty ) < 0 )
+        {
+            tx = -tx;
+            ty = -ty;
         }
     }
-    else
+
+    float getY( const float x ) const  //计算函数值y=kx+b
     {
-        is_F_mode = false;
+        return a * x + b;
     }
-}
-#endif
 
-void uav_state_callback( const std_msgs::UInt8::ConstPtr &msg )
-{
-    int flight_status = msg->data;
-    g_fsm.setDroneState( flight_status );
-}
-
-void guidance_distance_callback( const sensor_msgs::LaserScan &g_oa )
-{
-    ROS_INFO( "frame_id: %s stamp: %d\n", g_oa.header.frame_id.c_str(),
-              g_oa.header.stamp.sec );
-    ROS_INFO( "obstacle distance: [%f %f %f %f %f]\n", g_oa.ranges[0],
-              g_oa.ranges[1], g_oa.ranges[2], g_oa.ranges[3], g_oa.ranges[4] );
-    g_fsm.setHeightFromGuidance( g_oa.ranges[0] );
-}
-
-void guidance_position_callback( const geometry_msgs::Vector3Stamped &g_pos )
-{
-    ROS_INFO( "frame_id: %s stamp: %d\n", g_pos.header.frame_id.c_str(),
-              g_pos.header.stamp.sec );
-    g_fsm.setPositionFromGuidance( g_pos.vector.x, g_pos.vector.y );
-}
-
-// void ultrasonic_callback(const sensor_msgs::LaserScan& g_ul) {
-//   ROS_INFO("frame_id: %s stamp: %d\n", g_ul.header.frame_id.c_str(),
-//          g_ul.header.stamp.sec);
-//   for (int i = 0; i < 5; i++)
-//     ROS_INFO("ultrasonic distance: [%f]  reliability: [%d]\n",
-//     g_ul.ranges[i],
-//            (int)g_ul.intensities[i]);
-// }
-
-void vision_pillar_callback( const std_msgs::String::ConstPtr &msg )
-{
-    float h;
-    float pos[2];
-    int tri[4];
-    bool circle_found;
-    std::stringstream ss( msg->data.c_str() );
-    ss >> tri[0] >> tri[1] >> tri[2] >> tri[3] >> circle_found >> pos[1] >> pos[0] >>
-        h;
-    g_fsm.setCircleVariables( circle_found, pos, h );
-    g_fsm.setTriangleVariables( tri );
-}
-
-void vision_base_callback( const std_msgs::String::ConstPtr &msg )
-{
-    float pos[2];
-    bool base_found;
-    std::stringstream ss( msg->data.c_str() );
-    ss >> pos[1] >> pos[0];
-    if ( fabs( pos[0] ) < 0.000000001 && fabs( pos[1] ) < 0.000000001 )
-        base_found = false;
-    else
+    float getX( const float y ) const  //计算x值 x=ah*y+bh
     {
-        base_found = true;
-        if ( fabs( pos[1] ) > 0.000000001 )
-            pos[1] = pos[1] / 1000;
-        if ( fabs( pos[0] ) > 0.000000001 )
-            pos[0] = ( pos[0] / 1000 ) - 0.15;
+        return ah * y + bh;
     }
-    g_fsm.setBaseVariables( base_found, pos );
-}
 
-void vision_line_callback( const std_msgs::String::ConstPtr &msg )
-{
-    std::stringstream ss( msg->data.c_str() );
-    float line_normal[2];
-    float dist_to_line[2];
-    ss >> dist_to_line[0] >> dist_to_line[1] >> line_normal[0] >> line_normal[1];
-    g_fsm.setLineVariables( dist_to_line, line_normal );
-}
+    float error_plan1(
+        const vector< int >& x,
+        const vector< int >& y )  // y=kx+b方程误差计算（点到直线距离平方和）
+    {
+        float error = 0.0;
+        for ( int i = 0; i < ( int )x.size(); ++i )
+        {
+            error +=
+                ( a * x[i] + b - y[i] ) * ( a * x[i] + b - y[i] ) / ( a * a + 1 );
+        }
+        return error;
+    }
 
-void timer_callback( const ros::TimerEvent &evt )
-{
-    if ( is_F_mode )
+    float error_plan2( const vector< int >& x,
+                       const vector< int >& y )  // x=ah*y+bh方程误差计算
     {
-        g_fsm.run();
+        float error = 0.0;
+        for ( int i = 0; i < ( int )x.size(); ++i )
+        {
+            error += ( ah * y[i] + bh - x[i] ) * ( ah * y[i] + bh - x[i] ) /
+                     ( ah * ah + 1 );
+        }
+        return error;
     }
-    else
+
+    float error_point( float& x, float& y )
     {
-        /*not F mode, need to reset fsm*/
-        g_fsm.resetAllState();
-        ROS_INFO( "Wait for F mode" );
+        if ( is_kxb )
+            return ( a * x + b - y ) * ( a * x + b - y ) / ( a * a + 1 );
+        else
+            return ( ah * y + bh - x ) * ( ah * y + bh - x ) / ( ah * ah + 1 );
     }
-}
+
+    void print() const  //显示直线方程
+    {
+        if ( is_kxb )
+            cout << "y = " << a << "x + " << b << "\n";
+        else
+            cout << "x = " << ah << "y + " << bh << "\n";
+    }
+
+    void draw( Mat& src )  //绘图
+    {
+        uchar* data;
+        if ( is_kxb )  //如果是y=kx+b误差较小
+        {
+            for ( int i = 0; i < src.cols; ++i )  //在原图上绘制结果
+            {
+                int j = ( int )getY( i );
+                if ( j >= 0 && j <= src.rows )
+                {
+                    data = src.ptr< uchar >( j );
+                    *( data + i ) = 255;
+                }
+            }
+        }
+        else  //如果是x=ah*y+bh误差较小
+        {
+            for ( int i = 0; i < src.rows; ++i )  //在原图上绘制结果
+            {
+                data = src.ptr< uchar >( i );
+                int j = ( int )getX( i );
+                if ( j >= 0 && j <= src.cols )
+                {
+                    *( data + j ) = 255;
+                }
+            }
+        }
+    }
+
+    void direction( float x, float y, float& distance_x,
+                    float& distance_y )  //获取从点（x，y）到直线的向量
+    {
+        if ( is_kxb )
+        {
+            distance_x = -a * ( a * x + b - y ) / ( a * a + 1 );
+            distance_y = ( a * x + b - y ) / ( a * a + 1 );
+        }
+        else
+        {
+            distance_x = -( x - bh - ah * y ) / ( ah * ah + 1 );
+            distance_y = ah * ( x - bh - ah * y ) / ( ah * ah + 1 );
+        }
+    }
+};
