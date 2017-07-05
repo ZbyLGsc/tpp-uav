@@ -439,60 +439,93 @@ float RMChallengeVision::angle( Point pt1, Point pt2, Point pt0 )
         sqrt( ( dx1 * dx1 + dy1 * dy1 ) * ( dx2 * dx2 + dy2 * dy2 ) + 1e-10 );
     return acos( cosine );
 }
-/*********************************************************************/
-/*			函数名：getYellowRegion
-/*			功能：输入图像src，返回图像dst，黄色区域值为200,
-/*				其他区域根据满足条件多少，值分别为0, 50, 100, 150
-/*				便于显示直观图像调试
-/*				将最后一个参数if_debug赋1后，将通过颜色分别显示H
-*					SV三通道二值化结果
-/*				对应关系：蓝色对于H通道，绿色对应S通道，红色对应V通道
-/***************************************************************/
-void RMChallengeVision::getYellowRegion( Mat& src, Mat& dst, int h_low, int h_high,
-                                         int s_threshold, int v_threshold )
+/*********************************************************************
+			函数名：getYellowRegion
+			功能：输入图像src，返回图像dst，黄色区域值为200,
+				其他区域根据满足条件多少，值分别为0, 50, 100, 150
+				便于显示直观图像调试
+				将最后一个参数if_debug赋1后，将通过颜色分别显示H
+					SV三通道二值化结果
+				对应关系：蓝色对于H通道，绿色对应S通道，红色对应V通道
+***************************************************************/
+void RMChallengeVision::getYellowRegion( Mat& src, Mat& dst, int LowH, int HighH,
+                                         int sThreshold, int vThreshold )
 {
-    Mat hsv, Line_h1, Line_h2, Line_h, Line_sv;
+    Mat hsv,  Line_sv, hsvColorRegion;
     vector< Mat > hsvSplit;
     cvtColor( src, hsv, CV_BGR2HSV_FULL );  //转换成HSV
     split( hsv, hsvSplit );  //分离出HSV通道，用于提取黄色区域
-    threshold( hsvSplit[0], Line_h1, h_low, 255,
-               THRESH_BINARY );  //去除 H 小于 h_low 度的区域
-    threshold( hsvSplit[0], Line_h2, h_high, 255,
-               THRESH_BINARY_INV );  //去除 H 大于 h_high 度的区域
-    threshold( hsvSplit[1], hsvSplit[1], s_threshold, 255,
-               THRESH_BINARY );  //去除 S 小于 s_threshold 的区域
-    threshold( hsvSplit[2], hsvSplit[2], v_threshold, 255,
-               THRESH_BINARY );  //去除 V 小于 v_threshold 的区域
-    bitwise_and( Line_h1, Line_h2, Line_h );
+    //threshold( hsvSplit[0], Line_h1, LowH, 255,
+    //           THRESH_BINARY );  //去除 H 小于 LowH 度的区域
+    //threshold( hsvSplit[0], Line_h2, HighH, 255,
+    //           THRESH_BINARY_INV );  //去除 H 大于 HighH 度的区域
+	inRange( hsvSplit[0], LowH, HighH, hsvSplit[0]);
+    threshold( hsvSplit[1], hsvSplit[1], sThreshold, 255,
+               THRESH_BINARY );  //去除 S 小于 sThreshold 的区域
+    threshold( hsvSplit[2], hsvSplit[2], vThreshold, 255,
+               THRESH_BINARY );  //去除 V 小于 vThreshold 的区域
+    //bitwise_and( Line_h1, Line_h2, Line_h );
     bitwise_and( hsvSplit[1], hsvSplit[2], Line_sv );
-    bitwise_and( Line_h, Line_sv, dst );  //矩阵位与（255&255=255）
+    bitwise_and( hsvSplit[0], Line_sv, hsvColorRegion );  //矩阵位与（255&255=255）
     // Line_h = Line_h1 + Line_h2;
     // dst = Line_h + hsvSplit[1] + hsvSplit[2];
     if ( m_visable )  //调试用
     {
-        hsvSplit[0] = Line_h;
         merge( hsvSplit, hsv );
         imshow( "getYellowRegion hsv", hsv );
         waitKey( 1 );
     }
+	//use bgr to get yellow region
+	vector< Mat > bgrSplit;
+	Mat large, abs, region1, region2, bgrColorRegion;
+	split( src, bgrSplit);
+	compare( bgrSplit[1], bgrSplit[0], large, CMP_GT );
+	absdiff( bgrSplit[1], bgrSplit[0], abs);
+	threshold( abs, abs, 35, 255, THRESH_BINARY);
+	bitwise_and( abs, large, region1);
+	compare( bgrSplit[2], bgrSplit[0], large, CMP_GT );
+	absdiff( bgrSplit[2], bgrSplit[0], abs);
+	threshold( abs, abs, 20, 255, THRESH_BINARY);
+	bitwise_and( abs, large, region2);
+	/*absdiff( bgrSplit[2], bgrSplit[1], abs);
+	threshold( abs, region3, 10, 255, THRESH_BINARY_INV);
+	imshow( "region3", region3 );
+	cv::waitKey( 1 );*/
+
+	bitwise_and( region1, region2, bgrColorRegion);
+	//bitwise_and( colorRegion, region3, colorRegion);
+	if ( m_visable )
+	{
+		imshow( "region1 g-b", region1 );
+		waitKey( 1 );
+		imshow( "region2 r-b", region2 );
+		waitKey( 1 );
+	}
+
+	bitwise_and(hsvColorRegion, bgrColorRegion, dst);
+	//dst = bgrColorRegion;
+	if( m_visable )
+	{
+		imshow("Yellow Region", dst);
+	}
 }
 /**********************************************************
 		函数名：detectLine														
 		功能：对输入图像拟合直线											
-			距离向量结果储存在函数引用参数vector_x,vector_y中			 
-			线的单位方向向量储存在引用参数Line_x,Line_y中				 
+			距离向量结果储存在函数引用参数distance_x,distance_y中			 
+			线的单位方向向量储存在引用参数line_distance_x,line_distance_y中				 
 			以竖直向上为x轴，水平向右为y轴								 
 			if_debug表示是否调试，默认不调试							 
 			调试时显示中间状况的窗口以及相关输出						 
 			不调试时，仅仅计算距离向量和方向向量并储存					 
 ****************************************************************/
 void RMChallengeVision::detectLine( Mat& src, float& distance_x, float& distance_y,
-                                    float& line_vector_x, float& line_vector_y )
+                                    float& line_distance_x, float& line_distance_y )
 {
     Mat img, copy;
     vector< Mat > bgrSplit;
     vector< int > x, y;
-    float picture_vector_x, picture_vector_y;  //图片参考系的距离向量
+    float picture_distance_x, picture_distance_y;  //图片参考系的距离向量
     uchar* data;                               //获取图像数据所用数组
     if ( m_visable )
         split( src, bgrSplit );  //分离出BGR通道，为最终显示结果做准备
@@ -515,19 +548,19 @@ void RMChallengeVision::detectLine( Mat& src, float& distance_x, float& distance
     if ( !x.empty() )  //如果有数据
     {
         LeastSquare leastsq( x, y );  //拟合曲线
-        leastsq.direction( src.cols / 2, src.rows / 2, picture_vector_x,
-                           picture_vector_y );  //获取中心点到直线的向量,图像坐标
-        distance_y = picture_vector_x;  //转换为无人机坐标
-        distance_x = -picture_vector_y;
-        line_vector_y = leastsq.tx;
-        line_vector_x = -leastsq.ty;
+        leastsq.direction( src.cols / 2, src.rows / 2, picture_distance_x,
+                           picture_distance_y );  //获取中心点到直线的向量,图像坐标
+        distance_y = picture_distance_x;  //转换为无人机坐标
+        distance_x = -picture_distance_y;
+        line_distance_y = leastsq.tx;
+        line_distance_x = -leastsq.ty;
         if ( m_visable )
         {
             leastsq.print();              //显示结果
             leastsq.draw( bgrSplit[1] );  //绘制图线
             line( bgrSplit[1], Point( src.cols / 2, src.rows / 2 ),
-                  Point( src.cols / 2 + picture_vector_x,
-                         src.rows / 2 + picture_vector_y ),
+                  Point( src.cols / 2 + picture_distance_x,
+                         src.rows / 2 + picture_distance_y ),
                   Scalar( 255 ) );    //以中心点为起点绘制该向量
             merge( bgrSplit, copy );  //加入copy
             imshow( "detectLine", copy );
@@ -538,21 +571,21 @@ void RMChallengeVision::detectLine( Mat& src, float& distance_x, float& distance
 		函数名：detectLineWithT
 		功能： 判断是否有T型，若有，返回true
 			若无，返回false，并计算出中心点到直线的距离向量
-			距离向量结果储存在函数引用参数vector_x,vector_y中
-			线的单位方向向量储存在引用参数Line_x,Line_y中
+			距离向量结果储存在函数引用参数distance_x,distance_y中
+			线的单位方向向量储存在引用参数line_distance_x,line_distance_y中
 			以竖直向上为x轴，水平向右为y轴
 			if_debug表示是否调试，默认不调试
 			调试时显示中间状况的窗口以及相关输出
 			不调试时，仅仅计算距离向量和方向向量并储存
 *********************************************************/
 bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
-                                         float& distance_y, float& line_vector_x,
-                                         float& line_vector_y )
+                                         float& distance_y, float& line_distance_x,
+                                         float& line_distance_y )
 {
     Mat img, T_img, copy;//img用于拟合，T_img用于判断
 	vector< Mat > bgrSplit;
 	vector< int > x, y;//x，y坐标储存vector
-	float picture_vector_x, picture_vector_y;//图片参考系的距离向量
+	float picture_distance_x, picture_distance_y;//图片参考系的距离向量
 	int side = 71;//判断T型的核边长大小
 	double val_max;//高斯滤波后的最大值
 	Point p_max;//高斯滤波后最大值的位置
@@ -617,17 +650,17 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 		{
 			LeastSquare leastsq( x, y); //拟合曲线
 			leastsq.direction( src.cols / 2, src.rows / 2, 
-							  picture_vector_x, picture_vector_y);	//获取中心点到直线的向量,图像坐标
-			vector_y = picture_vector_x;//转换为无人机坐标
-			vector_x = -picture_vector_y;
-			Line_y = leastsq.tx;
-			Line_x = -leastsq.ty;
+							  picture_distance_x, picture_distance_y);	//获取中心点到直线的向量,图像坐标
+			distance_y = picture_distance_x;//转换为无人机坐标
+			distance_x = -picture_distance_y;
+			line_distance_y = leastsq.tx;
+			line_distance_x = -leastsq.ty;
 			if( m_visable )
 			{
 				leastsq.print(); //显示结果
 				leastsq.draw( bgrSplit[ 1 ] );	//绘制图线	
 				line( bgrSplit[1], Point(src.cols / 2, src.rows / 2), 
-					  Point(src.cols/2+picture_vector_x, src.rows/2+picture_vector_y), 
+					  Point(src.cols/2+picture_distance_x, src.rows/2+picture_distance_y), 
 					  Scalar( 255 ));	//以中心点为起点绘制该向量
 				cout << "maxpoint:" << p_max.x << " " << p_max.y << endl;
 				merge( bgrSplit, copy);		//加入copy
@@ -639,10 +672,10 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 	}
 	else 
 	{
-		vector_x = 0;
-		vector_y = 0;
-		Line_x = 0;
-		Line_y = 0;
+		distance_x = 0;
+		distance_y = 0;
+		line_distance_x = 0;
+		line_distance_y = 0;
 		return false;
 	}
 }
@@ -654,7 +687,6 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 				获取成功时返回true，超出边界时返回false					
 				if_debug设为true时，会在原图上绘制值为120点，注意：会改变原图
 *********************************************************/
-/**********************************************************/
 bool RMChallengeVision::getRectSide( Mat& src, vector< uchar >& side, int x, int y,
                                      int r )
 {
