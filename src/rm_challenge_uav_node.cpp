@@ -21,6 +21,7 @@ void rc_channels_callback( const dji_sdk::RCChannels rc_channels );
 #endif
 
 RMChallengeFSM g_fsm;
+bool is_F_mode = false;
 
 void uav_state_callback( const std_msgs::UInt8::ConstPtr &msg );
 void guidance_distance_callback( const sensor_msgs::LaserScan &g_oa );
@@ -58,26 +59,27 @@ int main( int argc, char **argv )
         node.subscribe( "tpp/yellow_line", 1, vision_line_callback );
     ros::Timer timer =
         node.createTimer( ros::Duration( 1.0 / 50.0 ), timer_callback );
-    g_fsm.initialize();
+
+    /*initialize fsm*/
+    g_fsm.initialize( node );
     ROS_INFO_STREAM( "initialize finish, start to run" );
+
     /*test setter function of FSM*/
     g_fsm.setDroneState( 3 );
     //    g_fsm.setDroneState( 3 );
     //    g_fsm.setDroneState( 4 );
     g_fsm.setHeightFromGuidance( 0 );
     g_fsm.setPositionFromGuidance( 7, 0 );
-    g_fsm.m_setpoints[0][0] = 8;
-    g_fsm.m_setpoints[0][1] = 0;
-       // float pos_err[2] = { 0.07, 0.3 };
-       // g_fsm.setCircleVariables( true, pos_err, 1.1 );
-       // g_fsm.setCircleVariables( false, pos_err, 1.1 );
-       // int tri[4] = { 1, 1, 0, 0 };
-       // g_fsm.setTriangleVariables( tri );
+    // float pos_err[2] = { 0.07, 0.3 };
+    // g_fsm.setCircleVariables( true, pos_err, 1.1 );
+    // g_fsm.setCircleVariables( false, pos_err, 1.1 );
+    // int tri[4] = { 1, 1, 0, 0 };
+    // g_fsm.setTriangleVariables( tri );
     //    g_fsm.setBaseVariables( true, pos_err );
     //    g_fsm.setBaseVariables( false, pos_err );
-       float dis[2] = { 0.3, 0.3 };
-       float nor[2] = { 1.3, -0.4 };
-       g_fsm.setLineVariables(dis,nor);
+    float dis[2] = { 0.3, 0.3 };
+    float nor[2] = { 1.3, -0.4 };
+    g_fsm.setLineVariables( dis, nor );
     //    ros::Duration( 2.0 ).sleep();
     /*test*/
     ros::spin();
@@ -88,6 +90,19 @@ int main( int argc, char **argv )
 void rc_channels_callback( const dji_sdk::RCChannels rc_channels )
 {
     g_rc_channels = rc_channels;
+    if ( fabs( rc_channels.mode - 8000 ) < 0.000001 )
+    {
+        /*F mode is 8000,P :-8000 ,A: 0*/
+        if ( fabs( rc_channels.gear + 10000 ) < 0.000001 )
+        {
+            /* gear up is -10000 ,gear down is -4545*/
+            is_F_mode = true;
+        }
+    }
+    else
+    {
+        is_F_mode = false;
+    }
 }
 #endif
 
@@ -165,5 +180,13 @@ void vision_line_callback( const std_msgs::String::ConstPtr &msg )
 
 void timer_callback( const ros::TimerEvent &evt )
 {
-    g_fsm.run();
+    if ( is_F_mode )
+    {
+        g_fsm.run();
+    }
+    else
+    {
+        /*not F mode, need to reset fsm*/
+        g_fsm.resetAllState();
+    }
 }
