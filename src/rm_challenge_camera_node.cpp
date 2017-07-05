@@ -121,7 +121,6 @@ int main( int argc, char **argv )
 //     ROS_INFO_STREAM( "process time" << g_processed_time );
 //     if ( g_processed_time > 0 )
 //         return;
-
 //     if ( g_cap.get( CV_CAP_PROP_POS_FRAMES ) >
 //          g_cap.get( CV_CAP_PROP_FRAME_COUNT ) - 2 )
 //     {
