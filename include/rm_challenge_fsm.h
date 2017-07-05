@@ -3,22 +3,25 @@
 #define MANIFOLD 2
 #define CURRENT_COMPUTER ZBY_PC
 
+#define TAKEOFF_POINT_NUMBER 7
 // parameters of uav
 #define PA_TAKEOFF_TIME 1000 * 8
-#define PA_TAKEOFF_HEIGHT_THRESHOLD 1.5
+#define PA_TAKEOFF_HEIGHT_THRESHOLD 0.1
 #define PA_TAKEOFF_POSITION_ERROR 2
+#define PA_BASE_HEIGHT_THRESHOLD 0.2
 
 #define PA_SETPOINT_POSITION_ERROR 1
 #define PA_GRASPPER_CONTROL_TIME 6
-#define PA_GO_UP_VELOCITY 0.2
+#define PA_GO_UP_VELOCITY 0.15
 
 #define PA_FLYING_HEIGHT 2.4
-#define PA_FLYING_HEIGHT_THRESHOLD 0.3
-#define PA_FLYING_Z_VELOCITY 0.2
+#define PA_FLYING_HEIGHT_THRESHOLD 0.2
+#define PA_FLYING_Z_VELOCITY 0.15
 
-#define PA_LAND_HEIGHT 1.0
+#define PA_LAND_COUNT 3
+#define PA_LAND_HEIGHT 1.05
 #define PA_LAND_HEIGHT_THRESHOLD 0.05
-#define PA_LAND_POSITION_THRESHOLD_LOW 0.05
+#define PA_LAND_POSITION_THRESHOLD_LOW 0.03
 #define PA_LAND_POSITION_THRESHOLD_HIGH 0.3
 #define PA_V_MIN_HIGH 0.12
 #define PA_V_MIN_LOW 0.036
@@ -28,8 +31,8 @@
 #define PA_KP_PILLAR_HIGH 0.3
 #define PA_KP_PILLAR_LOW 0.3
 
-#define PA_KN 1.0
-#define PA_KT 1.0
+#define PA_KN 0.15
+#define PA_KT 0.2
 
 #define PA_YAW_RATE 10
 #define PA_ANGLE_THRESHOLD 10
@@ -99,42 +102,56 @@ class RMChallengeFSM
     }
     ~RMChallengeFSM();
     void run();
-    void initialize();
-    void updateState();
+    void initialize( ros::NodeHandle &node_handle );
+    void resetAllState();
 
-  public:
+  private:
+    /**serial port*/
     boost::asio::serial_port *m_serial_port;
     boost::system::error_code m_err_code;
     boost::asio::io_service m_io_service;
-    TASK_STATE m_state;
-    static const int GOAL_NUMBER = 5;
-    /**
-    *takeoff point id,0 is start point
-    *1,2,4,5 are pillar,3, 6 are base
-    */
-    float m_goal_height[GOAL_NUMBER];
-    float m_takeoff_points[GOAL_NUMBER + 1][2];
-    float m_setpoints[GOAL_NUMBER + 1][2];
+
+/**dji sdk */
+#if CURRENT_COMPUTER == MANIFOLD
+    DJIDrone *m_drone;
+#endif
+
+    TASK_STATE m_state;  // initial
+                         /**
+                         *takeoff point id,0 is start point
+                         *1,2,4,5 are pillar,3, 6 are base
+                         */
+    float m_goal_height[TAKEOFF_POINT_NUMBER];
+    float m_takeoff_points[TAKEOFF_POINT_NUMBER + 1][2];
+    float m_setpoints[TAKEOFF_POINT_NUMBER + 1][2];
+
     /**subscribe from dji's nodes*/
-    UAV_STATE m_uav_state;                      ///<update outside
-    float m_current_height_from_guidance;       ///<height need to update outside
-    float m_current_position_from_guidance[2];  ///<position need to update outside
+    UAV_STATE m_uav_state;
+    float m_current_height_from_guidance;
+    float m_current_position_from_guidance[2];  // initial
+    float m_guidance_bias[2];
+
     /**subscribe from vision node about circle and triangle*/
     bool m_discover_pillar_circle;
-    float m_landpoint_position_error[2];  ///<need to update outside
+    float m_landpoint_position_error[2];
     float m_current_height_from_vision;
     int m_pillar_triangle[4];
+
     /**subscribe from  vision node about base*/
     bool m_discover_base;
+
     /**subscribe from vision node about detectLine*/
-    float m_distance_to_line[2];  ///<update outside
-    float m_line_normal[2];       ///<update outside
+    float m_distance_to_line[2];
+    float m_line_normal[2];
     LAND_POINT_TYPE m_land_point_type;
-    PREPARE_TO_LAND_TYPE m_prepare_to_land_type;
-    GRASPPER_STATE m_graspper_state = GRASPPER_CLOSE;  ///<update inside
-    int m_graspper_control_time = 0;
-    int m_current_takeoff_point_id = 0;  ///<current position, need to update inside
+    PREPARE_TO_LAND_TYPE m_prepare_to_land_type;  // initial
+    int m_land_counter;                           // initial
+    GRASPPER_STATE m_graspper_state = GRASPPER_CLOSE;
+    int m_graspper_control_time = 0;     // initial
+    int m_current_takeoff_point_id = 0;  // initial
     ros::Time m_takeoff_time;
+
+  private:
     /**uav state checking method*/
     void transferToTask( TASK_STATE task_state );  // tested
     bool isTakeoffTimeout();                       // tested
@@ -148,19 +165,20 @@ class RMChallengeFSM
     bool closeToSetPoint();                        // tested
     bool readyToLand();                            // tested
     bool finishGraspperTask();                     // tested
-                                                   /**uav control method*/
-  public:
+
+    /**uav control method*/
     void droneTakeoff();
     void droneLand();
     void controlDroneVelocity( float x, float y, float z, float yaw );
-    void controlGraspper();     // tested
-    void openGraspper();        // tested
-    void closeGraspper();       // tested
-    void updateTakeoffTime();   // tested
-    void droneGoUp();           // tested
-    void droneGoToSetPoint();   // tested
-    void droneTrackLine();      // tested
-    void droneHover();          // tested
+    void controlGraspper();    // tested
+    void openGraspper();       // tested
+    void closeGraspper();      // tested
+    void updateTakeoffTime();  // tested
+    void droneGoUp();          // tested
+    void droneGoToSetPoint();  // tested
+    void droneTrackLine();     // tested
+    void droneHover();         // tested
+    void droneDropDown();
     void dronePrepareToLand();  // tested
     void calculateNormalVelocity( float &x, float &y,
                                   LINE_TYPE lint_type );  // tested
@@ -170,7 +188,7 @@ class RMChallengeFSM
     void unitifiyVector( float &x, float &y );  // tested
     void navigateByTriangle( float &x, float &y, float &z );  // tested
     void navigateByCircle( float &x, float &y, float &z );    // tested
-    /**update state variables from subscription*/
+
   public:
     /**update from dji's nodes*/
     void setDroneState( int state );
