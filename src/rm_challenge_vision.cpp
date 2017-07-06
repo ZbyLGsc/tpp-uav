@@ -453,6 +453,7 @@ void RMChallengeVision::getYellowRegion( Mat& src, Mat& dst, int LowH, int HighH
 {
     Mat hsv,  Line_sv, hsvColorRegion;
     vector< Mat > hsvSplit;
+    GaussianBlur( src, src, Size( 5, 5), 0);
     cvtColor( src, hsv, CV_BGR2HSV_FULL );  //转换成HSV
     split( hsv, hsvSplit );  //分离出HSV通道，用于提取黄色区域
     //threshold( hsvSplit[0], Line_h1, LowH, 255,
@@ -513,14 +514,14 @@ void RMChallengeVision::getYellowRegion( Mat& src, Mat& dst, int LowH, int HighH
 		函数名：detectLine														
 		功能：对输入图像拟合直线											
 			距离向量结果储存在函数引用参数distance_x,distance_y中			 
-			线的单位方向向量储存在引用参数line_distance_x,line_distance_y中				 
+			线的单位方向向量储存在引用参数line_vector_x,line_vector_y中				 
 			以竖直向上为x轴，水平向右为y轴								 
 			if_debug表示是否调试，默认不调试							 
 			调试时显示中间状况的窗口以及相关输出						 
 			不调试时，仅仅计算距离向量和方向向量并储存					 
 ****************************************************************/
 void RMChallengeVision::detectLine( Mat& src, float& distance_x, float& distance_y,
-                                    float& line_distance_x, float& line_distance_y )
+                                    float& line_vector_x, float& line_vector_y )
 {
     Mat img, copy;
     vector< Mat > bgrSplit;
@@ -545,15 +546,15 @@ void RMChallengeVision::detectLine( Mat& src, float& distance_x, float& distance
         }
     }
 
-    if ( !x.empty() )  //如果有数据
+    if ( x.size() > 100 )  //如果有数据
     {
         LeastSquare leastsq( x, y );  //拟合曲线
         leastsq.direction( src.cols / 2, src.rows / 2, picture_distance_x,
                            picture_distance_y );  //获取中心点到直线的向量,图像坐标
         distance_y = picture_distance_x;  //转换为无人机坐标
         distance_x = -picture_distance_y;
-        line_distance_y = leastsq.tx;
-        line_distance_x = -leastsq.ty;
+        line_vector_y = leastsq.tx;
+        line_vector_x = -leastsq.ty;
         if ( m_visable )
         {
             leastsq.print();              //显示结果
@@ -566,21 +567,29 @@ void RMChallengeVision::detectLine( Mat& src, float& distance_x, float& distance
             imshow( "detectLine", copy );
         }
     }
+    else 
+	{
+		distance_x = 0;
+		distance_y = 0;
+		line_vector_x = 0;
+		line_vector_y = 0;
+		
+	}
 }
 /**************************************************************
 		函数名：detectLineWithT
 		功能： 判断是否有T型，若有，返回true
 			若无，返回false，并计算出中心点到直线的距离向量
 			距离向量结果储存在函数引用参数distance_x,distance_y中
-			线的单位方向向量储存在引用参数line_distance_x,line_distance_y中
+			线的单位方向向量储存在引用参数line_vector_x,line_vector_y中
 			以竖直向上为x轴，水平向右为y轴
 			if_debug表示是否调试，默认不调试
 			调试时显示中间状况的窗口以及相关输出
 			不调试时，仅仅计算距离向量和方向向量并储存
 *********************************************************/
 bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
-                                         float& distance_y, float& line_distance_x,
-                                         float& line_distance_y )
+                                         float& distance_y, float& line_vector_x,
+                                         float& line_vector_y )
 {
     Mat img, T_img, copy;//img用于拟合，T_img用于判断
 	vector< Mat > bgrSplit;
@@ -612,7 +621,7 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 	//threshold(T_img, T_img, val_max/2, 255, THRESH_BINARY);//二值化，便于判断是否有三条边
 	
 	//if(if_Tri(T_img, p_max.x, p_max.y, side, if_debug))//判断最大点周围是否有三条边，若有，肯定为T型
-	if( !x.empty() ) //如果有数据
+	if( x.empty() > 100 ) //如果有数据
 	{
 		Mat element1 = getStructuringElement( MORPH_ELLIPSE,
 											  Size(5,5));//设置腐蚀的核大小,5x5的椭圆，即圆
@@ -641,7 +650,8 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 				circle( bgrSplit[1], Point( p_max.x, p_max.y),
 					    side / 2, Scalar( 255 ) );
 				merge( bgrSplit, copy);
-				imshow( "T position circle", copy);
+				cout << "maxpoint:" << p_max.x << " " << p_max.y << endl;
+				imshow( "max point in T_img", copy);
 				waitKey( 1 );
 			}
 			return true;
@@ -653,8 +663,8 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 							  picture_distance_x, picture_distance_y);	//获取中心点到直线的向量,图像坐标
 			distance_y = picture_distance_x;//转换为无人机坐标
 			distance_x = -picture_distance_y;
-			line_distance_y = leastsq.tx;
-			line_distance_x = -leastsq.ty;
+			line_vector_y = leastsq.tx;
+			line_vector_x = -leastsq.ty;
 			if( m_visable )
 			{
 				leastsq.print(); //显示结果
@@ -662,7 +672,7 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 				line( bgrSplit[1], Point(src.cols / 2, src.rows / 2), 
 					  Point(src.cols/2+picture_distance_x, src.rows/2+picture_distance_y), 
 					  Scalar( 255 ));	//以中心点为起点绘制该向量
-				cout << "maxpoint:" << p_max.x << " " << p_max.y << endl;
+				
 				merge( bgrSplit, copy);		//加入copy
 				imshow( "detectLineWithT", copy);
 				waitKey( 1 );
@@ -674,8 +684,8 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 	{
 		distance_x = 0;
 		distance_y = 0;
-		line_distance_x = 0;
-		line_distance_y = 0;
+		line_vector_x = 0;
+		line_vector_y = 0;
 		return false;
 	}
 }
