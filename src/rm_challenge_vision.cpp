@@ -456,6 +456,7 @@ void RMChallengeVision::getYellowRegion( Mat& src, Mat& dst, int h_low, int h_hi
 {
     Mat hsv, Line_h1, Line_h2, Line_h, Line_sv;
     vector< Mat > hsvSplit;
+    GaussianBlur( src, src, Size( 5, 5), 0);
     cvtColor( src, hsv, CV_BGR2HSV_FULL );  //转换成HSV
     split( hsv, hsvSplit );  //分离出HSV通道，用于提取黄色区域
     threshold( hsvSplit[0], Line_h1, h_low, 255,
@@ -515,7 +516,7 @@ void RMChallengeVision::detectLine( Mat& src, float& distance_x, float& distance
         }
     }
 
-    if ( !x.empty() )  //如果有数据
+    if ( x.empty() > 100 )  //如果有数据
     {
         LeastSquare leastsq( x, y );  //拟合曲线
         leastsq.direction( src.cols / 2, src.rows / 2, picture_vector_x,
@@ -536,6 +537,14 @@ void RMChallengeVision::detectLine( Mat& src, float& distance_x, float& distance
             imshow( "detectLine", copy );
         }
     }
+    else 
+	{
+		distance_x = 0;
+		distance_y = 0;
+		line_vector_x = 0;
+		line_vector_y = 0;
+		
+	}
 }
 /**************************************************************
         函数名：detectLineWithT
@@ -586,7 +595,7 @@ bool RMChallengeVision::detectLineWithT( Mat& src, float& distance_x,
 
     // if(if_Tri(T_img, p_max.x, p_max.y, side,
     // if_debug))//判断最大点周围是否有三条边，若有，肯定为T型
-    if ( !x.empty() )  //如果有数据
+    if ( x.empty() > 100 )  //如果有数据
     {
         Mat element1 = getStructuringElement(
             MORPH_ELLIPSE, Size( 5, 5 ) );  //设置腐蚀的核大小,5x5的椭圆，即圆
