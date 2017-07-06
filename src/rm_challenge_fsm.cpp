@@ -152,6 +152,7 @@ void RMChallengeFSM::run()
 void RMChallengeFSM::resetAllState()
 {
   m_state= TAKE_OFF;
+  m_uav_state=UAV_LAND;
   m_current_position_from_guidance[0]= 0.0;
   m_current_position_from_guidance[1]= 0.0;
   m_prepare_to_land_type= PREPARE_AT_HIGH;
@@ -917,7 +918,7 @@ void RMChallengeFSM::setPositionFromGuidance(float x, float y)
     /* update guidance bias*/
     m_guidance_bias[0]= x - m_current_position_from_guidance[0];
     m_guidance_bias[1]= y - m_current_position_from_guidance[1];
-    ROS_INFO_STREAM("guidance bisa is:" << m_guidance_bias[0] << ","
+    ROS_INFO_STREAM("guidance bias is:" << m_guidance_bias[0] << ","
                                         << m_guidance_bias[1]);
   }
   else if(m_uav_state == UAV_FLY)
@@ -925,7 +926,7 @@ void RMChallengeFSM::setPositionFromGuidance(float x, float y)
     /* update actual position */
     m_current_position_from_guidance[0]= x - m_guidance_bias[0];
     m_current_position_from_guidance[1]= y - m_guidance_bias[1];
-    ROS_INFO_STREAM("pos from gui is:"
+    ROS_INFO_STREAM("pos from guidance is:"
                     << m_current_position_from_guidance[0] << ","
                     << m_current_position_from_guidance[1]);
   }
